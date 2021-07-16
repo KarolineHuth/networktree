@@ -56,6 +56,9 @@ networktree <- function(...) UseMethod("networktree")
 #' @param method "mob" or "ctree"
 #' @param model can be any combination of c("correlation", "mean", "variance")
 #' splits are determined based on the specified characteristics
+#' @param fit determines the fitting function of the model based on the nature of the data. "mvn" fits the
+#' data according to a gaussian graphical model, suitable for continuous variables. "ising" fits the data
+#' according to the ising model, suitable for binary variables. 
 #' @param transform should stored correlation matrices be transformed to partial correlations
 #' or a graphical lasso for plotting? Can be set to "cor" (default), "pcor", or "glasso"
 #' @param na.action a function which indicates what should happen when the data
@@ -69,17 +72,23 @@ networktree <- function(...) UseMethod("networktree")
 networktree.default <- function(nodevars, splitvars, 
                                 method=c("mob","ctree"),
                                 model ="correlation",
+                                fit = "mvn",
                                 transform=c("cor", "pcor", "glasso"),
                                 na.action=na.omit,
                                 weights=NULL,...){
   nodevars <- formatnetworktreeinput(nodevars, prefix="nodevar")
   splitvars <- formatnetworktreeinput(splitvars, prefix="splitvar")
+  
+  if (fit == "ising" & method[1] == "ctree"){
+    warning('ctree is not yet implemented for Ising models; mob used instead')
+    method[1] <- "mob"
+  }
 
   if(method[1]=="mob"){
     d <- data.frame(nodevars,splitvars)
     form <- paste(paste(colnames(nodevars), collapse=" + "), "~",paste(colnames(splitvars), collapse=" + "))
     form <- as.formula(form)
-    res <- networktree.formula(form, data = d, transform=transform, method=method, na.action=na.action, model = model, ...)
+    res <- networktree.formula(form, data = d, transform=transform, method=method, fit = fit, na.action=na.action, model = model, ...)
     
   } else if(method[1]=="ctree"){
     netdata <- as.data.frame(nodevars); splitvars <- as.data.frame(splitvars)
@@ -108,7 +117,7 @@ networktree.default <- function(nodevars, splitvars,
 #'@rdname networktree
 #'@export
 networktree.formula <- function(formula, data, transform=c("cor", "pcor", "glasso"), 
-                                method=c("mob","ctree"),
+                                method=c("mob","ctree"), fit = c("mvn", "ising"),
                                 na.action=na.omit, model="correlation", ...)
 {
   if(method[1]=="mob"){
@@ -129,15 +138,23 @@ networktree.formula <- function(formula, data, transform=c("cor", "pcor", "glass
 	    control$minsize <- 2 * k + k * (k-1) / 2
     }
     
-    ## control options for mvnfit
-    mvncontrol <- list(model=model)
-    
     ## call mob
     m <- match.call(expand.dots = FALSE)
-    m$fit <- mvnfit
     m$control <- control
+    
+    
+    
+    if (fit == "mvn"){
+    m$fit <- mvnfit
+    ## control options for mvnfit
+    mvncontrol <- list(model=model)
     for(n in names(mvncontrol)) if(!is.null(mvncontrol[[n]])) m[[n]] <- mvncontrol[[n]]
+    } else{
+    m$fit <- isingfit
+    }
+    
     if("..." %in% names(m)) m[["..."]] <- NULL
+    
     m[[1L]] <- as.call(quote(partykit::mob))
     rval <- eval(m, parent.frame())
     

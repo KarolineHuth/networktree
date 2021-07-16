@@ -21,10 +21,15 @@
 #'
 #' @export
 #'
+
+source("~/OneDrive - UvA/01_Projects/O008_rbinnet/maximum_pseudolikelihood_functions.R")
+
 isingfit <- function(y, start = NULL, weights = NULL,
                        offset = NULL, model = c("correlation", "mean"),
                        estfun = TRUE, object = FALSE, ...) {
   
+# !!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# Update dependecies: include rbinnet
   nodevars <- y 
   
   k <- ncol(nodevars) # number of nodes
@@ -61,10 +66,10 @@ isingfit <- function(y, start = NULL, weights = NULL,
       scores <- c()
       vc <- NULL
       
-      # Get parameter estimates for submodel
+      # Get parameter estimates for (sub-)model
       coef <- c(diag(fit$sigma), as.vector(fit$sigma)[as.vector(lower.tri(fit$sigma))])
       ynam <- if(is.null(varnames)) 1L:p else varnames
-      objnames <- c(paste0("main_", ynam), combn(p, 2, function(x) paste0("cor_", x[1], "_", x[2])))
+      objnames <- c(paste0("main_", ynam), combn(k, 2, function(x) paste0("theta_", x[1], "_", x[2])))
       
       id <- NULL
       if(any("main"        == model)) id <- c(id, 1:k)
@@ -76,16 +81,11 @@ isingfit <- function(y, start = NULL, weights = NULL,
     }
     
   } else {
-    # Maartens Function 
-    # main effect of variables on diagonal
-    main <- diag(fit$sigma)
+    main <- fit$mu # main effect 
+    R <- fit$sigma # interaction parameters
+    inter <- as.vector(fit$sigma)[as.vector(lower.tri(fit$sigma))] # interactions in vector form
     
-    # interactions on off-diagonal
-    R <- fit$sigma
-    inter <- as.vector(fit$sigma)[as.vector(lower.tri(fit$sigma))]
-    diag(R) <- 0
-    
-    # --- STEP 2: Compute matrixes to make actual computation easier
+    # --- STEP 2: Compute matrices to make actual computation easier
     nodevars <- t(nodevars)
     
     M <- R%*%nodevars # compute the sums 
@@ -98,25 +98,21 @@ isingfit <- function(y, start = NULL, weights = NULL,
     loglik <- sum(nodevars*S) - sum(log(D))
     
     # --- STEP 4: Score Functions
-    
     # Score Function for main effect
-    score_main <- nodevars - E # 0 up to the 3rd decimal
-    
-    
+    score_main <- nodevars - E 
     # Score Function for interaction 
     score_rho <- combn(k, 2,
                        function(x) (2*(nodevars[x[1] ,] * nodevars[x[2], ]) - (E[x[1], ] * nodevars[x[2], ]) - (E[x[2], ] * nodevars[x[1], ])) )
     
     # --- STEP 5: Store objects depending which measures to consider
-    
     # Set-Up
     coef <- c(main, inter)
     scores <- cbind(t(score_main), score_rho)
-    ynam <- if(is.null(varnames)) 1L:p else varnames
-    objnames <- c(paste0("main_", ynam), combn(k, 2, function(x) paste0("cor_", x[1], "_", x[2])))
+    ynam <- if(is.null(varnames)) 1L:k else varnames
+    objnames <- c(paste0("main_", ynam), combn(k, 2, function(x) paste0("theta_", x[1], "_", x[2])))
     
     id <- NULL
-    if(any("main"        == model)) id <- c(id, 1:k)
+    if(any("mean"        == model)) id <- c(id, 1:k)
     if(any("correlation" == model)) id <- c(id, 1:(k*(k-1)/2) + k)
     
     coef <- coef[id]
@@ -146,3 +142,5 @@ isingfit <- function(y, start = NULL, weights = NULL,
   
   return(res)
 }
+
+
